@@ -7,6 +7,8 @@
     "start": "electron .",
     "dev": "vite",
     "build": "vite build",
+    "pack": "electron-builder --dir",
+    "dist": "vite build && electron-builder",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",
@@ -15,6 +17,8 @@
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
     "@mui/material": "^7.1.0",
+    "@mui/x-date-pickers": "^8.3.0",
+    "date-fns": "^4.1.0",
     "electron-store": "^10.0.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
@@ -23,6 +27,23 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^4.4.1",
     "electron": "^36.2.0",
+    "electron-builder": "^26.0.12",
     "vite": "^6.3.5"
+  },
+  "build": {
+    "appId": "com.yourname.hbnote",
+    "productName": "HBnote",
+    "directories": {
+      "output": "build"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "HBnote.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    }
   }
 }

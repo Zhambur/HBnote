@@ -3,6 +3,7 @@ import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { Box, CssBaseline, Tab, Tabs, Button, IconButton } from "@mui/material";
 import Notes from "./components/Notes";
 import TodoList from "./components/TodoList";
+import DDL from "./components/DDL";
 
 // Import local icons if needed for buttons
 import MinimizeIcon from "./components/mui_local_icons/MinimizeIcon"; // Placeholder - needs creation
@@ -158,6 +159,7 @@ function App() {
         >
           <Tab label="Note" sx={{ WebkitAppRegion: "no-drag" }} />
           <Tab label="todoList" sx={{ WebkitAppRegion: "no-drag" }} />
+          <Tab label="DDL" sx={{ WebkitAppRegion: "no-drag" }} />
         </Tabs>
 
         {/* Content Area - Scrollable */}
@@ -166,6 +168,11 @@ function App() {
             p: 2,
             flexGrow: 1,
             overflowY: "auto",
+            position: "relative",
+            "& .MuiDialog-root": {
+              position: "fixed",
+              zIndex: 1300,
+            },
           }}
         >
           <Box sx={{ display: tab === 0 ? "block" : "none" }}>
@@ -173,6 +180,9 @@ function App() {
           </Box>
           <Box sx={{ display: tab === 1 ? "block" : "none" }}>
             <TodoList />
+          </Box>
+          <Box sx={{ display: tab === 2 ? "block" : "none" }}>
+            <DDL />
           </Box>
         </Box>
       </Box>
