@@ -50,6 +50,17 @@ contextBridge.exposeInMainWorld("electronAPI", {
   },
   focusWindow: () => ipcRenderer.invoke("focus-window"),
 
+  // 悬浮窗控制函数
+  enterFloatMode: () => {
+    console.log("[Preload] Enter float mode request sent");
+    return ipcRenderer.invoke("enter-float-mode");
+  },
+
+  exitFloatMode: () => {
+    console.log("[Preload] Exit float mode request sent");
+    return ipcRenderer.invoke("exit-float-mode");
+  },
+
   // Listen for window state changes
   onWindowStateChange: (callback) => {
     console.log("[Preload] Set window state change listener");
@@ -63,6 +74,22 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("window-state-change", listener);
     return () => {
       ipcRenderer.removeListener("window-state-change", listener);
+    };
+  },
+
+  // 监听悬浮窗模式切换
+  onFloatModeChange: (callback) => {
+    console.log("[Preload] Set float mode change listener");
+    const listener = (_, isFloatMode) => {
+      console.log(
+        "[Preload] float mode change:",
+        isFloatMode ? "float" : "normal"
+      );
+      callback(isFloatMode);
+    };
+    ipcRenderer.on("float-mode-change", listener);
+    return () => {
+      ipcRenderer.removeListener("float-mode-change", listener);
     };
   },
 });

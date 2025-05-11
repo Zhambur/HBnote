@@ -4,12 +4,14 @@ import { Box, CssBaseline, Tab, Tabs, Button, IconButton } from "@mui/material";
 import Notes from "./components/Notes";
 import TodoList from "./components/TodoList";
 import DDL from "./components/DDL";
+import FloatWindow from "./components/FloatWindow";
 
 // Import local icons if needed for buttons
-import MinimizeIcon from "./components/mui_local_icons/MinimizeIcon"; // Placeholder - needs creation
-import MaximizeIcon from "./components/mui_local_icons/MaximizeIcon"; // Placeholder - needs creation
-import CloseIcon from "./components/mui_local_icons/CloseIcon"; // Placeholder - needs creation
-import RestoreIcon from "./components/mui_local_icons/RestoreIcon"; // Placeholder - needs creation
+import MinimizeIcon from "./components/mui_local_icons/MinimizeIcon";
+import MaximizeIcon from "./components/mui_local_icons/MaximizeIcon";
+import CloseIcon from "./components/mui_local_icons/CloseIcon";
+import RestoreIcon from "./components/mui_local_icons/RestoreIcon";
+import FloatIcon from "./components/mui_local_icons/FloatIcon";
 
 const theme = createTheme({
   palette: {
@@ -28,6 +30,7 @@ function App() {
   const [tab, setTab] = useState(0);
   const draggableBarHeight = "32px";
   const [isMaximized, setIsMaximized] = useState(false); // State for maximize button icon
+  const [isFloatMode, setIsFloatMode] = useState(false); // 悬浮窗模式状态
 
   // Function to update maximize state (optional)
   const updateMaximizeState = async () => {
@@ -45,17 +48,28 @@ function App() {
     updateMaximizeState();
 
     // Listen for window state changes from main process
-    const removeListener = window.electronAPI?.onWindowStateChange?.(
+    const removeMaximizeListener = window.electronAPI?.onWindowStateChange?.(
       (isMaximized) => {
         console.log("[App] Window maximize state changed:", isMaximized);
         setIsMaximized(isMaximized);
       }
     );
 
+    // 监听悬浮窗模式变化
+    const removeFloatListener = window.electronAPI?.onFloatModeChange?.(
+      (isFloatMode) => {
+        console.log("[App] Float mode changed:", isFloatMode);
+        setIsFloatMode(isFloatMode);
+      }
+    );
+
     // Cleanup listener when component unmounts
     return () => {
-      if (typeof removeListener === "function") {
-        removeListener();
+      if (typeof removeMaximizeListener === "function") {
+        removeMaximizeListener();
+      }
+      if (typeof removeFloatListener === "function") {
+        removeFloatListener();
       }
     };
   }, []);
@@ -68,6 +82,28 @@ function App() {
     window.electronAPI?.maximizeRestoreWindow?.();
     // State will be updated via the window-state-change event listener
   };
+
+  // 切换到悬浮窗模式
+  const handleEnterFloatMode = async () => {
+    console.log("[App] Float button clicked, entering float mode");
+    await window.electronAPI?.enterFloatMode?.();
+  };
+
+  // 退出悬浮窗模式
+  const handleExitFloatMode = async () => {
+    console.log("[App] Restore button clicked, exiting float mode");
+    await window.electronAPI?.exitFloatMode?.();
+  };
+
+  // 根据模式渲染不同的UI
+  if (isFloatMode) {
+    return (
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <FloatWindow onRestore={handleExitFloatMode} />
+      </ThemeProvider>
+    );
+  }
 
   return (
     <ThemeProvider theme={theme}>
@@ -106,6 +142,17 @@ function App() {
 
           {/* Right side - Window Controls */}
           <Box sx={{ display: "flex", WebkitAppRegion: "no-drag" }}>
+            {/* 悬浮窗按钮 */}
+            <IconButton
+              size="small"
+              onClick={handleEnterFloatMode}
+              sx={{ color: "inherit", p: "4px" }}
+              aria-label="float mode"
+              title="悬浮窗模式"
+            >
+              <FloatIcon fontSize="inherit" />
+            </IconButton>
+
             {/* Minimize Button */}
             <IconButton
               size="small"
