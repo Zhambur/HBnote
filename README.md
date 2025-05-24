@@ -116,7 +116,7 @@ hbnote/
 
 应用数据使用 Electron Store 保存在用户目录，默认位置：
 
-- Windows: `%APPDATA%\hbnote\hbnote-data.json`
+- Windows: `C:\Users\<Username>\AppData\Roaming\hbnote\hbnote-data.json`
 
 ## 开发计划
 
