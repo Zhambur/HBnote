@@ -30,6 +30,10 @@ function TodoList() {
   const [isLoading, setIsLoading] = useState(true);
   const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
   const [todoToDelete, setTodoToDelete] = useState(null);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editingTodo, setEditingTodo] = useState(null);
+  const [editText, setEditText] = useState("");
+  const [editPriority, setEditPriority] = useState("medium");
   const [userOrder, setUserOrder] = useState(null); // 用户拖拽后的自定义顺序
   const [dragOverTodoId, setDragOverTodoId] = useState(null); // 跟踪拖拽悬停的待办事项ID
   const [draggedTodoId, setDraggedTodoId] = useState(null); // 跟踪正在拖拽的待办事项ID
@@ -122,6 +126,40 @@ function TodoList() {
       setIsConfirmDialogOpen(false);
       setTodoToDelete(null);
     }
+  };
+
+  const handleEditTodo = (todo) => {
+    setEditingTodo(todo);
+    setEditText(todo.text);
+    setEditPriority(todo.priority || "medium");
+    setIsEditDialogOpen(true);
+  };
+
+  const handleSaveEdit = () => {
+    if (editText.trim() && editingTodo) {
+      setTodos((prevTodos) =>
+        prevTodos.map((todo) =>
+          todo.id === editingTodo.id
+            ? {
+                ...todo,
+                text: editText.trim(),
+                priority: editPriority,
+              }
+            : todo
+        )
+      );
+      setIsEditDialogOpen(false);
+      setEditingTodo(null);
+      setEditText("");
+      setEditPriority("medium");
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditDialogOpen(false);
+    setEditingTodo(null);
+    setEditText("");
+    setEditPriority("medium");
   };
 
   // 拖拽功能
@@ -335,6 +373,7 @@ function TodoList() {
               isDropTarget={dropTargetId === todo.id}
               onToggle={handleToggleTodo}
               onDelete={handleDeleteTodo}
+              onEdit={handleEditTodo}
               onDragStart={(e) => handleDragStart(e, todo.id)}
               onDragOver={(e) => handleDragOver(e, todo.id)}
               onDragLeave={() => setDragOverTodoId(null)}
@@ -364,6 +403,56 @@ function TodoList() {
           <Button onClick={cancelDelete}>取消</Button>
           <Button onClick={confirmDelete} color="error" autoFocus>
             删除
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* 编辑对话框 */}
+      <Dialog
+        open={isEditDialogOpen}
+        onClose={handleCancelEdit}
+        aria-labelledby="edit-dialog-title"
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle id="edit-dialog-title">编辑待办事项</DialogTitle>
+        <DialogContent>
+          <Box sx={{ pt: 1 }}>
+            <TextField
+              autoFocus
+              margin="dense"
+              label="待办事项内容"
+              type="text"
+              fullWidth
+              variant="outlined"
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              onKeyPress={(e) => {
+                if (e.key === "Enter") {
+                  handleSaveEdit();
+                }
+              }}
+            />
+            <FormControl fullWidth margin="dense" sx={{ mt: 2 }}>
+              <InputLabel>优先级</InputLabel>
+              <Select
+                value={editPriority}
+                label="优先级"
+                onChange={(e) => setEditPriority(e.target.value)}
+              >
+                {priorityOptions.map((option) => (
+                  <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCancelEdit}>取消</Button>
+          <Button onClick={handleSaveEdit} color="primary" variant="contained">
+            保存
           </Button>
         </DialogActions>
       </Dialog>

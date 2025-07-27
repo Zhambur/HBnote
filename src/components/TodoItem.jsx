@@ -11,6 +11,7 @@ import {
 } from "@mui/material";
 // import { Delete as DeleteIcon } from "@mui/icons-material"; // 移除
 import DeleteIcon from "./mui_local_icons/DeleteIcon"; // 导入本地图标
+import EditIcon from "./mui_local_icons/EditIcon"; // 导入编辑图标
 
 function TodoItem({
   todo,
@@ -21,6 +22,7 @@ function TodoItem({
   isDropTarget,
   onToggle,
   onDelete,
+  onEdit,
   onDragStart,
   onDragOver,
   onDragLeave,
@@ -33,6 +35,10 @@ function TodoItem({
 
   const handleDelete = () => {
     onDelete(todo.id); // 假设 todo 对象有 id
+  };
+
+  const handleEdit = () => {
+    onEdit(todo);
   };
 
   // 优先级选项
@@ -190,17 +196,27 @@ function TodoItem({
           </Typography>
         </Box>
 
-        {/* 删除按钮 */}
-        {onDelete && (
-          <IconButton
-            aria-label="delete todo"
-            onClick={handleDelete}
-            size="small"
-            sx={{ ml: 1, flexShrink: 0 }}
-          >
-            <DeleteIcon />
-          </IconButton>
-        )}
+        {/* 操作按钮 */}
+        <Box sx={{ display: "flex", gap: 0.5, ml: 1, flexShrink: 0 }}>
+          {onEdit && (
+            <IconButton
+              aria-label="edit todo"
+              onClick={handleEdit}
+              size="small"
+            >
+              <EditIcon />
+            </IconButton>
+          )}
+          {onDelete && (
+            <IconButton
+              aria-label="delete todo"
+              onClick={handleDelete}
+              size="small"
+            >
+              <DeleteIcon />
+            </IconButton>
+          )}
+        </Box>
       </Box>
 
       {/* 底部信息行 */}
