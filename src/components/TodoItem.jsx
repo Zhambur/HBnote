@@ -12,7 +12,21 @@ import {
 // import { Delete as DeleteIcon } from "@mui/icons-material"; // 移除
 import DeleteIcon from "./mui_local_icons/DeleteIcon"; // 导入本地图标
 
-function TodoItem({ todo, onToggle, onDelete }) {
+function TodoItem({
+  todo,
+  index,
+  isDragOver,
+  isDragging,
+  isAnimating,
+  isDropTarget,
+  onToggle,
+  onDelete,
+  onDragStart,
+  onDragOver,
+  onDragLeave,
+  onDragEnd,
+  onDrop,
+}) {
   const handleToggle = () => {
     onToggle(todo.id); // 假设 todo 对象有 id
   };
@@ -40,17 +54,108 @@ function TodoItem({ todo, onToggle, onDelete }) {
         bgcolor: todo.completed
           ? "action.disabledBackground"
           : "background.paper",
-        mb: 1,
+        mb: isDragOver ? 2.5 : 1,
         borderRadius: 1,
         boxShadow: 1,
-        transition: "background-color 0.3s ease",
+        transition: "all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)",
         flexDirection: "column",
         alignItems: "stretch",
+        cursor: "grab",
+        userSelect: "none", // 防止拖拽时选中文本
+        transform: isDragOver ? "translateY(15px)" : "translateY(0)",
+        opacity: isDragging && isAnimating ? 0.4 : 1,
+        "&:active": {
+          cursor: "grabbing",
+        },
         "&:hover": {
           bgcolor: todo.completed
             ? "action.disabledBackground"
             : "action.hover",
+          boxShadow: 3,
+          transform: isDragOver ? "translateY(15px)" : "translateY(-2px)",
         },
+        "&.dragging": {
+          opacity: 0.8,
+          transform: "rotate(2deg) scale(1.05)",
+          boxShadow: 8,
+          zIndex: 1000,
+        },
+        "&.drag-over": {
+          backgroundColor: "rgba(25, 118, 210, 0.08)",
+          border: "2px dashed #1976d2",
+          transform: "scale(1.02)",
+          boxShadow: 8,
+        },
+
+        "&.flying-in": {
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          transform: "translateY(0) scale(1.05)",
+          boxShadow: 12,
+          backgroundColor: "rgba(76, 175, 80, 0.1)",
+          border: "2px solid #4CAF50",
+          zIndex: 1001,
+          animation: "flyIn 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)",
+        },
+        "@keyframes flyIn": {
+          "0%": {
+            transform: "translateY(-50px) scale(0.9)",
+            opacity: 0.6,
+          },
+          "100%": {
+            transform: "translateY(0) scale(1.05)",
+            opacity: 1,
+          },
+        },
+      }}
+      draggable
+      onDragStart={(e) => {
+        e.currentTarget.classList.add("dragging");
+        onDragStart(e);
+      }}
+      onDrag={(e) => {
+        e.preventDefault();
+        // 拖拽过程中让元素变得透明
+        e.currentTarget.style.opacity = "0.3";
+      }}
+      onDragEnd={(e) => {
+        e.currentTarget.classList.remove("dragging");
+        // 清除内联样式
+        e.currentTarget.style.transform = "";
+        e.currentTarget.style.transition = "";
+        e.currentTarget.style.opacity = "";
+        onDragEnd();
+      }}
+      onDragEnter={(e) => {
+        e.preventDefault();
+        if (!isDragging) {
+          e.currentTarget.classList.add("drag-over");
+        }
+      }}
+      onDragLeave={(e) => {
+        e.preventDefault();
+        // 确保只有当鼠标真正离开元素时才移除高亮
+        if (!e.currentTarget.contains(e.relatedTarget)) {
+          e.currentTarget.classList.remove("drag-over");
+        }
+        onDragLeave(e);
+      }}
+      onDragOver={(e) => {
+        e.preventDefault();
+        onDragOver(e);
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        e.currentTarget.classList.remove("drag-over");
+        if (isDragging) {
+          e.currentTarget.classList.add("flying-in");
+          setTimeout(() => {
+            e.currentTarget.classList.remove("flying-in");
+          }, 400);
+        }
+        onDrop(e);
       }}
     >
       {/* 主要内容行 */}

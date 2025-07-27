@@ -30,6 +30,11 @@ function TodoList() {
   const [isLoading, setIsLoading] = useState(true);
   const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
   const [todoToDelete, setTodoToDelete] = useState(null);
+  const [userOrder, setUserOrder] = useState(null); // 用户拖拽后的自定义顺序
+  const [dragOverTodoId, setDragOverTodoId] = useState(null); // 跟踪拖拽悬停的待办事项ID
+  const [draggedTodoId, setDraggedTodoId] = useState(null); // 跟踪正在拖拽的待办事项ID
+  const [isAnimating, setIsAnimating] = useState(false); // 跟踪是否正在播放放置动画
+  const [dropTargetId, setDropTargetId] = useState(null); // 跟踪放置目标ID
 
   // 优先级选项
   const priorityOptions = [
@@ -119,25 +124,120 @@ function TodoList() {
     }
   };
 
-  // 将待办事项按选择的排序方式排序
-  const sortedTodos = [...todos].sort((a, b) => {
-    if (sortBy === "priority") {
-      // 按优先级排序（高 > 中 > 低）
-      const priorityOrder = { high: 3, medium: 2, low: 1 };
-      const priorityA = priorityOrder[a.priority || "medium"] || 2; // 默认中优先级
-      const priorityB = priorityOrder[b.priority || "medium"] || 2;
+  // 拖拽功能
+  const handleDragStart = (e, todoId) => {
+    // 使用更结构化的数据传递
+    const dragData = {
+      type: "todo",
+      id: todoId,
+      index: todos.findIndex((todo) => todo.id === todoId),
+    };
+    e.dataTransfer.setData("application/json", JSON.stringify(dragData));
+    e.dataTransfer.effectAllowed = "move";
 
-      if (priorityA !== priorityB) {
-        return priorityB - priorityA; // 优先级高的在前
-      }
+    // 设置拖拽时的视觉反馈
+    if (e.dataTransfer.setDragImage) {
+      const dragImage = e.target.cloneNode(true);
+      dragImage.style.opacity = "0.8";
+      dragImage.style.transform = "rotate(2deg) scale(0.95)";
+      dragImage.style.position = "absolute";
+      dragImage.style.top = "-1000px";
+      dragImage.style.left = "-1000px";
+      document.body.appendChild(dragImage);
 
-      // 优先级相同时，按创建时间排序（新的在前）
-      return new Date(b.date) - new Date(a.date);
-    } else {
-      // 按创建时间排序（新的在前）
-      return new Date(b.date) - new Date(a.date);
+      // 计算鼠标在元素内的相对位置
+      const rect = e.target.getBoundingClientRect();
+      const offsetX = e.clientX - rect.left;
+      const offsetY = e.clientY - rect.top;
+
+      e.dataTransfer.setDragImage(dragImage, offsetX, offsetY);
+      setTimeout(() => document.body.removeChild(dragImage), 0);
     }
-  });
+
+    setDraggedTodoId(todoId);
+  };
+
+  const handleDragOver = (e, todoId) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (draggedTodoId && draggedTodoId !== todoId) {
+      setDragOverTodoId(todoId);
+    }
+  };
+
+  const handleDrop = (e, targetTodoId) => {
+    e.preventDefault();
+    setDragOverTodoId(null); // 清除拖拽悬停状态
+    setDropTargetId(targetTodoId); // 设置放置目标
+
+    let draggedTodoId;
+    try {
+      const dragData = JSON.parse(e.dataTransfer.getData("application/json"));
+      draggedTodoId = dragData.id;
+    } catch (error) {
+      // 兼容旧的数据格式
+      draggedTodoId = e.dataTransfer.getData("text/plain");
+    }
+
+    if (draggedTodoId === targetTodoId) {
+      setDraggedTodoId(null);
+      setDropTargetId(null);
+      return;
+    }
+
+    const draggedIndex = todos.findIndex((todo) => todo.id === draggedTodoId);
+    const targetIndex = todos.findIndex((todo) => todo.id === targetTodoId);
+
+    if (draggedIndex === -1 || targetIndex === -1) {
+      setDraggedTodoId(null);
+      setDropTargetId(null);
+      return;
+    }
+
+    // 开始放置动画
+    setIsAnimating(true);
+
+    // 延迟更新数据，让动画先播放
+    setTimeout(() => {
+      const newTodos = [...todos];
+      const [draggedTodo] = newTodos.splice(draggedIndex, 1);
+      newTodos.splice(targetIndex, 0, draggedTodo);
+
+      setTodos(newTodos);
+      setUserOrder(newTodos.map((todo) => todo.id)); // 记录用户自定义顺序
+      setDraggedTodoId(null);
+      setDropTargetId(null);
+      setIsAnimating(false);
+    }, 400); // 与飞入动画时长匹配
+  };
+
+  // 将待办事项按选择的排序方式排序
+  const sortedTodos = userOrder
+    ? // 如果用户有自定义顺序，按用户顺序排序
+      [...todos].sort((a, b) => {
+        const aIndex = userOrder.indexOf(a.id);
+        const bIndex = userOrder.indexOf(b.id);
+        return aIndex - bIndex;
+      })
+    : // 否则按选择的排序方式排序
+      [...todos].sort((a, b) => {
+        if (sortBy === "priority") {
+          // 按优先级排序（高 > 中 > 低）
+          const priorityOrder = { high: 3, medium: 2, low: 1 };
+          const priorityA = priorityOrder[a.priority || "medium"] || 2; // 默认中优先级
+          const priorityB = priorityOrder[b.priority || "medium"] || 2;
+
+          if (priorityA !== priorityB) {
+            return priorityB - priorityA; // 优先级高的在前
+          }
+
+          // 优先级相同时，按创建时间排序（新的在前）
+          return new Date(b.date) - new Date(a.date);
+        } else {
+          // 按创建时间排序（新的在前）
+          return new Date(b.date) - new Date(a.date);
+        }
+      });
 
   return (
     <Box>
@@ -176,7 +276,10 @@ function TodoList() {
               <Select
                 value={sortBy}
                 label="排序方式"
-                onChange={(e) => setSortBy(e.target.value)}
+                onChange={(e) => {
+                  setSortBy(e.target.value);
+                  setUserOrder(null); // 切换排序方式时重置用户自定义顺序
+                }}
               >
                 <MenuItem value="priority">按优先级</MenuItem>
                 <MenuItem value="time">按创建时间</MenuItem>
@@ -215,13 +318,31 @@ function TodoList() {
           你很勤快，没有需要做的。
         </Typography>
       ) : (
-        <List sx={{ pt: 0 }}>
-          {sortedTodos.map((todo) => (
+        <List
+          sx={{ pt: 0 }}
+          onDragOver={(e) => {
+            e.preventDefault(); // 阻止默认行为，避免拖拽重影
+          }}
+        >
+          {sortedTodos.map((todo, index) => (
             <TodoItem
               key={todo.id}
               todo={todo}
+              index={index}
+              isDragOver={dragOverTodoId === todo.id}
+              isDragging={draggedTodoId === todo.id}
+              isAnimating={isAnimating}
+              isDropTarget={dropTargetId === todo.id}
               onToggle={handleToggleTodo}
               onDelete={handleDeleteTodo}
+              onDragStart={(e) => handleDragStart(e, todo.id)}
+              onDragOver={(e) => handleDragOver(e, todo.id)}
+              onDragLeave={() => setDragOverTodoId(null)}
+              onDragEnd={() => {
+                setDragOverTodoId(null);
+                setDraggedTodoId(null);
+              }}
+              onDrop={(e) => handleDrop(e, todo.id)}
             />
           ))}
         </List>
