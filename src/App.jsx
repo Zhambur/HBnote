@@ -4,6 +4,7 @@ import { Box, CssBaseline, Tab, Tabs, Button, IconButton } from "@mui/material";
 import Notes from "./components/Notes";
 import TodoList from "./components/TodoList";
 import DDL from "./components/DDL";
+import Schedule from "./components/Schedule";
 import FloatWindow from "./components/FloatWindow";
 
 // Import local icons if needed for buttons
@@ -207,6 +208,7 @@ function App() {
           <Tab label="Note" sx={{ WebkitAppRegion: "no-drag" }} />
           <Tab label="todoList" sx={{ WebkitAppRegion: "no-drag" }} />
           <Tab label="DDL" sx={{ WebkitAppRegion: "no-drag" }} />
+          <Tab label="Schedule" sx={{ WebkitAppRegion: "no-drag" }} />
         </Tabs>
 
         {/* Content Area - Scrollable */}
@@ -230,6 +232,9 @@ function App() {
           </Box>
           <Box sx={{ display: tab === 2 ? "block" : "none" }}>
             <DDL />
+          </Box>
+          <Box sx={{ display: tab === 3 ? "block" : "none" }}>
+            <Schedule />
           </Box>
         </Box>
       </Box>
