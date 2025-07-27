@@ -21,3 +21,6 @@ yarn-error.log*
 .vscode
 *.swp
 *.swo
+
+# 本地帮助文档
+BUILD_HELP.md
