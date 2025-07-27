@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { Box, CssBaseline, Tab, Tabs, Button, IconButton } from "@mui/material";
 import Notes from "./components/Notes";
@@ -13,25 +13,39 @@ import MaximizeIcon from "./components/mui_local_icons/MaximizeIcon";
 import CloseIcon from "./components/mui_local_icons/CloseIcon";
 import RestoreIcon from "./components/mui_local_icons/RestoreIcon";
 import FloatIcon from "./components/mui_local_icons/FloatIcon";
-
-const theme = createTheme({
-  palette: {
-    mode: "dark",
-    primary: {
-      main: "#90caf9",
-    },
-    background: {
-      default: "rgba(18, 18, 18, 0.8)",
-      paper: "rgba(18, 18, 18, 0.9)",
-    },
-  },
-});
+import DarkModeIcon from "./components/mui_local_icons/DarkModeIcon";
+import LightModeIcon from "./components/mui_local_icons/LightModeIcon";
 
 function App() {
   const [tab, setTab] = useState(0);
   const draggableBarHeight = "32px";
   const [isMaximized, setIsMaximized] = useState(false); // State for maximize button icon
   const [isFloatMode, setIsFloatMode] = useState(false); // 悬浮窗模式状态
+  const [mode, setMode] = useState("dark"); // 主题模式状态
+
+  // 创建主题
+  const theme = useMemo(
+    () =>
+      createTheme({
+        palette: {
+          mode,
+          primary: {
+            main: mode === "dark" ? "#90caf9" : "#1976d2",
+          },
+          background: {
+            default:
+              mode === "dark"
+                ? "rgba(18, 18, 18, 0.8)"
+                : "rgba(248, 248, 248, 0.8)",
+            paper:
+              mode === "dark"
+                ? "rgba(18, 18, 18, 0.9)"
+                : "rgba(255, 255, 255, 0.9)",
+          },
+        },
+      }),
+    [mode]
+  );
 
   // Function to update maximize state (optional)
   const updateMaximizeState = async () => {
@@ -43,6 +57,33 @@ function App() {
       console.error("Failed to get maximize state:", err);
     }
   };
+
+  // 加载主题设置
+  useEffect(() => {
+    const loadTheme = async () => {
+      try {
+        const savedMode = await window.electronAPI?.storeGet?.("themeMode");
+        if (savedMode && (savedMode === "light" || savedMode === "dark")) {
+          setMode(savedMode);
+        }
+      } catch (error) {
+        console.error("Failed to load theme mode:", error);
+      }
+    };
+    loadTheme();
+  }, []);
+
+  // 保存主题设置
+  useEffect(() => {
+    const saveTheme = async () => {
+      try {
+        await window.electronAPI?.storeSet?.("themeMode", mode);
+      } catch (error) {
+        console.error("Failed to save theme mode:", error);
+      }
+    };
+    saveTheme();
+  }, [mode]);
 
   useEffect(() => {
     // Get initial maximize state
@@ -96,12 +137,17 @@ function App() {
     await window.electronAPI?.exitFloatMode?.();
   };
 
+  // 切换主题模式
+  const toggleTheme = () => {
+    setMode((prevMode) => (prevMode === "light" ? "dark" : "light"));
+  };
+
   // 根据模式渲染不同的UI
   if (isFloatMode) {
     return (
       <ThemeProvider theme={theme}>
         <CssBaseline />
-        <FloatWindow onRestore={handleExitFloatMode} />
+        <FloatWindow onRestore={handleExitFloatMode} mode={mode} />
       </ThemeProvider>
     );
   }
@@ -143,6 +189,21 @@ function App() {
 
           {/* Right side - Window Controls */}
           <Box sx={{ display: "flex", WebkitAppRegion: "no-drag" }}>
+            {/* 主题切换按钮 */}
+            <IconButton
+              size="small"
+              onClick={toggleTheme}
+              sx={{ color: "inherit", p: "4px" }}
+              aria-label="toggle theme"
+              title={mode === "dark" ? "切换到亮色模式" : "切换到暗色模式"}
+            >
+              {mode === "dark" ? (
+                <LightModeIcon fontSize="inherit" />
+              ) : (
+                <DarkModeIcon fontSize="inherit" />
+              )}
+            </IconButton>
+
             {/* 悬浮窗按钮 */}
             <IconButton
               size="small"

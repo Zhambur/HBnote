@@ -3,7 +3,7 @@ import { Box, Typography, IconButton } from "@mui/material";
 import RestoreIcon from "./mui_local_icons/RestoreIcon";
 
 // 使用React.memo优化组件
-const FloatWindow = React.memo(({ onRestore }) => {
+const FloatWindow = React.memo(({ onRestore, mode = "dark" }) => {
   const [ddls, setDdls] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -79,17 +79,20 @@ const FloatWindow = React.memo(({ onRestore }) => {
     return formatTimeRemaining(nextDdl.deadline);
   }, [nextDdl, formatTimeRemaining]);
 
-  // 静态样式对象
+  // 动态样式对象，根据主题模式调整
   const styles = {
     container: {
       height: "100%",
       display: "flex",
       flexDirection: "column",
-      backgroundColor: "rgba(18, 18, 18, 0.85)",
+      backgroundColor:
+        mode === "dark"
+          ? "rgba(18, 18, 18, 0.85)"
+          : "rgba(255, 255, 255, 0.85)",
       borderRadius: "8px",
       overflow: "hidden",
       padding: "8px",
-      color: "white",
+      color: mode === "dark" ? "white" : "black",
       WebkitAppRegion: "drag", // 整个窗口可拖动
     },
     header: {
