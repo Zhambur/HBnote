@@ -89,13 +89,15 @@ function createWindow() {
     height: normalWindowBounds.height,
     frame: false,
     transparent: true,
+    titleBarStyle: "hidden",
+    titleBarOverlay: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       nodeIntegration: false,
       contextIsolation: true,
     },
-    // 基本配置足够，避免过多不兼容设置
-    backgroundColor: "#121212", // 使用不透明背景，更可靠
+    // 使用透明背景，让CSS控制透明度
+    backgroundColor: "#00000000", // 完全透明
   });
 
   console.log("[Main] Creating window...");

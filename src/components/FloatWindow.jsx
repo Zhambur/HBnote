@@ -1,11 +1,16 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { Box, Typography, IconButton } from "@mui/material";
+import { Box, Typography, IconButton, Slider, Tooltip } from "@mui/material";
 import RestoreIcon from "./mui_local_icons/RestoreIcon";
+import EditIcon from "./mui_local_icons/EditIcon";
 
 // 使用React.memo优化组件
 const FloatWindow = React.memo(({ onRestore, mode = "dark" }) => {
   const [ddls, setDdls] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // 悬浮窗设置状态
+  const [opacity, setOpacity] = useState(0.9);
+  const [showOpacitySlider, setShowOpacitySlider] = useState(false);
 
   // 使用useCallback优化函数引用
   const loadDdls = useCallback(async () => {
@@ -28,6 +33,33 @@ const FloatWindow = React.memo(({ onRestore, mode = "dark" }) => {
       setLoading(false);
     }
   }, []);
+
+  // 加载悬浮窗设置
+  useEffect(() => {
+    const loadFloatSettings = async () => {
+      try {
+        const savedOpacity = await window.electronAPI?.storeGet?.(
+          "floatOpacity"
+        );
+        if (savedOpacity !== undefined) setOpacity(savedOpacity);
+      } catch (error) {
+        console.error("Failed to load float settings:", error);
+      }
+    };
+    loadFloatSettings();
+  }, []);
+
+  // 保存悬浮窗设置
+  useEffect(() => {
+    const saveFloatSettings = async () => {
+      try {
+        await window.electronAPI?.storeSet?.("floatOpacity", opacity);
+      } catch (error) {
+        console.error("Failed to save float settings:", error);
+      }
+    };
+    saveFloatSettings();
+  }, [opacity]);
 
   useEffect(() => {
     loadDdls();
@@ -79,7 +111,7 @@ const FloatWindow = React.memo(({ onRestore, mode = "dark" }) => {
     return formatTimeRemaining(nextDdl.deadline);
   }, [nextDdl, formatTimeRemaining]);
 
-  // 动态样式对象，根据主题模式调整
+  // 动态样式对象，根据主题模式和设置调整
   const styles = {
     container: {
       height: "100%",
@@ -87,31 +119,68 @@ const FloatWindow = React.memo(({ onRestore, mode = "dark" }) => {
       flexDirection: "column",
       backgroundColor:
         mode === "dark"
-          ? "rgba(18, 18, 18, 0.85)"
-          : "rgba(255, 255, 255, 0.85)",
+          ? `rgba(18, 18, 18, ${opacity})`
+          : `rgba(255, 255, 255, ${opacity})`,
       borderRadius: "8px",
       overflow: "hidden",
       padding: "8px",
       color: mode === "dark" ? "white" : "black",
       WebkitAppRegion: "drag", // 整个窗口可拖动
+      // 移除所有边框和分割线
+      border: "none",
+      outline: "none",
+      // 当透明度很低时，增强文字对比度
+      ...(opacity < 0.3 && {
+        textShadow:
+          mode === "dark"
+            ? "0 1px 2px rgba(0, 0, 0, 0.8)"
+            : "0 1px 2px rgba(255, 255, 255, 0.8)",
+      }),
     },
     header: {
       display: "flex",
       justifyContent: "space-between",
       alignItems: "center",
       mb: 1,
+      border: "none",
+      borderBottom: "none",
     },
     headerText: {
       fontWeight: "bold",
     },
-    restoreButton: {
+    buttonGroup: {
+      display: "flex",
+      gap: "2px",
+    },
+    iconButton: {
       color: "white",
       p: "2px",
       WebkitAppRegion: "no-drag", // 按钮不可拖动
+      border: "none",
+      "&:hover": {
+        backgroundColor: "rgba(255, 255, 255, 0.1)",
+      },
+    },
+    opacitySlider: {
+      position: "absolute",
+      top: "40px",
+      right: "20px",
+      width: "120px",
+      backgroundColor:
+        mode === "dark" ? "rgba(0, 0, 0, 0.9)" : "rgba(255, 255, 255, 0.95)",
+      borderRadius: "4px",
+      padding: "8px",
+      zIndex: 1000,
+      WebkitAppRegion: "no-drag",
+      border:
+        mode === "dark"
+          ? "1px solid rgba(255, 255, 255, 0.2)"
+          : "1px solid rgba(0, 0, 0, 0.1)",
     },
     contentArea: {
       flexGrow: 1,
       overflow: "hidden",
+      border: "none",
     },
     title: {
       fontWeight: "bold",
@@ -143,10 +212,56 @@ const FloatWindow = React.memo(({ onRestore, mode = "dark" }) => {
         <Typography variant="subtitle2" sx={styles.headerText}>
           最近DDL
         </Typography>
-        <IconButton size="small" onClick={onRestore} sx={styles.restoreButton}>
-          <RestoreIcon fontSize="small" />
-        </IconButton>
+        <Box sx={styles.buttonGroup}>
+          {/* 透明度调节按钮 */}
+          <Tooltip
+            title={`透明度: ${Math.round(opacity * 100)}%`}
+            placement="bottom"
+          >
+            <IconButton
+              size="small"
+              onClick={() => setShowOpacitySlider(!showOpacitySlider)}
+              sx={styles.iconButton}
+            >
+              <EditIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+
+          {/* 恢复按钮 */}
+          <IconButton size="small" onClick={onRestore} sx={styles.iconButton}>
+            <RestoreIcon fontSize="small" />
+          </IconButton>
+        </Box>
       </Box>
+
+      {/* 透明度滑块 */}
+      {showOpacitySlider && (
+        <Box sx={styles.opacitySlider}>
+          <Typography variant="caption" sx={{ mb: 1, display: "block" }}>
+            {Math.round(opacity * 100)}%
+          </Typography>
+          <Slider
+            value={opacity}
+            onChange={(event, newValue) => setOpacity(newValue)}
+            min={0.05}
+            max={1}
+            step={0.01}
+            size="small"
+            sx={{
+              "& .MuiSlider-thumb": {
+                width: 12,
+                height: 12,
+              },
+              "& .MuiSlider-track": {
+                height: 2,
+              },
+              "& .MuiSlider-rail": {
+                height: 2,
+              },
+            }}
+          />
+        </Box>
+      )}
 
       {/* 内容区 */}
       <Box sx={styles.contentArea}>
