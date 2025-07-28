@@ -1,6 +1,23 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
-import { Box, CssBaseline, Tab, Tabs, Button, IconButton } from "@mui/material";
+import {
+  Box,
+  CssBaseline,
+  Tab,
+  Tabs,
+  Button,
+  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Slider,
+  Typography,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+} from "@mui/material";
 import Notes from "./components/Notes";
 import TodoList from "./components/TodoList";
 import DDL from "./components/DDL";
@@ -15,6 +32,7 @@ import RestoreIcon from "./components/mui_local_icons/RestoreIcon";
 import FloatIcon from "./components/mui_local_icons/FloatIcon";
 import DarkModeIcon from "./components/mui_local_icons/DarkModeIcon";
 import LightModeIcon from "./components/mui_local_icons/LightModeIcon";
+import BackgroundIcon from "./components/mui_local_icons/BackgroundIcon";
 
 function App() {
   const [tab, setTab] = useState(0);
@@ -22,6 +40,13 @@ function App() {
   const [isMaximized, setIsMaximized] = useState(false); // State for maximize button icon
   const [isFloatMode, setIsFloatMode] = useState(false); // 悬浮窗模式状态
   const [mode, setMode] = useState("dark"); // 主题模式状态
+
+  // 背景设置状态
+  const [backgroundImage, setBackgroundImage] = useState("");
+  const [backgroundOpacity, setBackgroundOpacity] = useState(0.3);
+  const [backgroundPosition, setBackgroundPosition] = useState("center");
+  const [backgroundSize, setBackgroundSize] = useState("cover");
+  const [isBackgroundDialogOpen, setIsBackgroundDialogOpen] = useState(false);
 
   // 创建主题
   const theme = useMemo(
@@ -85,6 +110,58 @@ function App() {
     saveTheme();
   }, [mode]);
 
+  // 加载背景设置
+  useEffect(() => {
+    const loadBackgroundSettings = async () => {
+      try {
+        const savedImage = await window.electronAPI?.storeGet?.(
+          "backgroundImage"
+        );
+        const savedOpacity = await window.electronAPI?.storeGet?.(
+          "backgroundOpacity"
+        );
+        const savedPosition = await window.electronAPI?.storeGet?.(
+          "backgroundPosition"
+        );
+        const savedSize = await window.electronAPI?.storeGet?.(
+          "backgroundSize"
+        );
+
+        if (savedImage) setBackgroundImage(savedImage);
+        if (savedOpacity !== undefined) setBackgroundOpacity(savedOpacity);
+        if (savedPosition) setBackgroundPosition(savedPosition);
+        if (savedSize) setBackgroundSize(savedSize);
+      } catch (error) {
+        console.error("Failed to load background settings:", error);
+      }
+    };
+    loadBackgroundSettings();
+  }, []);
+
+  // 保存背景设置
+  useEffect(() => {
+    const saveBackgroundSettings = async () => {
+      try {
+        await window.electronAPI?.storeSet?.(
+          "backgroundImage",
+          backgroundImage
+        );
+        await window.electronAPI?.storeSet?.(
+          "backgroundOpacity",
+          backgroundOpacity
+        );
+        await window.electronAPI?.storeSet?.(
+          "backgroundPosition",
+          backgroundPosition
+        );
+        await window.electronAPI?.storeSet?.("backgroundSize", backgroundSize);
+      } catch (error) {
+        console.error("Failed to save background settings:", error);
+      }
+    };
+    saveBackgroundSettings();
+  }, [backgroundImage, backgroundOpacity, backgroundPosition, backgroundSize]);
+
   useEffect(() => {
     // Get initial maximize state
     updateMaximizeState();
@@ -98,48 +175,59 @@ function App() {
     );
 
     // 监听悬浮窗模式变化
-    const removeFloatListener = window.electronAPI?.onFloatModeChange?.(
-      (isFloatMode) => {
-        console.log("[App] Float mode changed:", isFloatMode);
-        setIsFloatMode(isFloatMode);
+    const removeFloatModeListener = window.electronAPI?.onFloatModeChange?.(
+      (isFloat) => {
+        console.log("[App] Float mode changed:", isFloat);
+        setIsFloatMode(isFloat);
       }
     );
 
-    // Cleanup listener when component unmounts
     return () => {
-      if (typeof removeMaximizeListener === "function") {
-        removeMaximizeListener();
-      }
-      if (typeof removeFloatListener === "function") {
-        removeFloatListener();
-      }
+      if (removeMaximizeListener) removeMaximizeListener();
+      if (removeFloatModeListener) removeFloatModeListener();
     };
   }, []);
 
   const handleMaximizeRestore = () => {
-    console.log(
-      "[App] windows button clicked, state now:",
-      isMaximized ? "maximized" : "normal"
-    );
     window.electronAPI?.maximizeRestoreWindow?.();
-    // State will be updated via the window-state-change event listener
   };
 
-  // 切换到悬浮窗模式
   const handleEnterFloatMode = async () => {
-    console.log("[App] Float button clicked, entering float mode");
-    await window.electronAPI?.enterFloatMode?.();
+    try {
+      await window.electronAPI?.enterFloatMode?.();
+    } catch (error) {
+      console.error("Failed to enter float mode:", error);
+    }
   };
 
-  // 退出悬浮窗模式
   const handleExitFloatMode = async () => {
-    console.log("[App] Restore button clicked, exiting float mode");
-    await window.electronAPI?.exitFloatMode?.();
+    try {
+      await window.electronAPI?.exitFloatMode?.();
+    } catch (error) {
+      console.error("Failed to exit float mode:", error);
+    }
   };
 
   // 切换主题模式
   const toggleTheme = () => {
     setMode((prevMode) => (prevMode === "light" ? "dark" : "light"));
+  };
+
+  // 处理背景图片选择
+  const handleBackgroundImageSelect = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setBackgroundImage(e.target.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // 清除背景图片
+  const handleClearBackground = () => {
+    setBackgroundImage("");
   };
 
   // 根据模式渲染不同的UI
@@ -162,6 +250,23 @@ function App() {
           overflow: "hidden",
           display: "flex",
           flexDirection: "column",
+          position: "relative",
+          ...(backgroundImage && {
+            "&::before": {
+              content: '""',
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundImage: `url(${backgroundImage})`,
+              backgroundPosition: backgroundPosition,
+              backgroundSize: backgroundSize,
+              backgroundRepeat: "no-repeat",
+              opacity: backgroundOpacity,
+              zIndex: -1,
+            },
+          }),
         }}
       >
         {/* Draggable Top Bar with Window Controls */}
@@ -202,6 +307,17 @@ function App() {
               ) : (
                 <DarkModeIcon fontSize="inherit" />
               )}
+            </IconButton>
+
+            {/* 背景设置按钮 */}
+            <IconButton
+              size="small"
+              onClick={() => setIsBackgroundDialogOpen(true)}
+              sx={{ color: "inherit", p: "4px" }}
+              aria-label="background settings"
+              title="背景设置"
+            >
+              <BackgroundIcon fontSize="inherit" />
             </IconButton>
 
             {/* 悬浮窗按钮 */}
@@ -298,6 +414,108 @@ function App() {
             <Schedule />
           </Box>
         </Box>
+
+        {/* 背景设置对话框 */}
+        <Dialog
+          open={isBackgroundDialogOpen}
+          onClose={() => setIsBackgroundDialogOpen(false)}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle>背景设置</DialogTitle>
+          <DialogContent>
+            <Box sx={{ mb: 3 }}>
+              <Typography gutterBottom>选择背景图片</Typography>
+              <input
+                accept="image/*"
+                style={{ display: "none" }}
+                id="background-image-input"
+                type="file"
+                onChange={handleBackgroundImageSelect}
+              />
+              <label htmlFor="background-image-input">
+                <Button variant="outlined" component="span">
+                  选择图片
+                </Button>
+              </label>
+              {backgroundImage && (
+                <Button
+                  variant="outlined"
+                  onClick={handleClearBackground}
+                  sx={{ ml: 1 }}
+                >
+                  清除背景
+                </Button>
+              )}
+            </Box>
+
+            {backgroundImage && (
+              <>
+                <Box sx={{ mb: 3 }}>
+                  <Typography gutterBottom>
+                    透明度: {Math.round(backgroundOpacity * 100)}%
+                  </Typography>
+                  <Slider
+                    value={backgroundOpacity}
+                    onChange={(event, newValue) =>
+                      setBackgroundOpacity(newValue)
+                    }
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    marks={[
+                      { value: 0, label: "0%" },
+                      { value: 0.5, label: "50%" },
+                      { value: 1, label: "100%" },
+                    ]}
+                  />
+                </Box>
+
+                <Box sx={{ mb: 3 }}>
+                  <FormControl fullWidth>
+                    <InputLabel>背景位置</InputLabel>
+                    <Select
+                      value={backgroundPosition}
+                      onChange={(e) => setBackgroundPosition(e.target.value)}
+                      label="背景位置"
+                    >
+                      <MenuItem value="center">居中</MenuItem>
+                      <MenuItem value="top">顶部</MenuItem>
+                      <MenuItem value="bottom">底部</MenuItem>
+                      <MenuItem value="left">左侧</MenuItem>
+                      <MenuItem value="right">右侧</MenuItem>
+                      <MenuItem value="top left">左上</MenuItem>
+                      <MenuItem value="top right">右上</MenuItem>
+                      <MenuItem value="bottom left">左下</MenuItem>
+                      <MenuItem value="bottom right">右下</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Box>
+
+                <Box sx={{ mb: 3 }}>
+                  <FormControl fullWidth>
+                    <InputLabel>背景尺寸</InputLabel>
+                    <Select
+                      value={backgroundSize}
+                      onChange={(e) => setBackgroundSize(e.target.value)}
+                      label="背景尺寸"
+                    >
+                      <MenuItem value="cover">覆盖</MenuItem>
+                      <MenuItem value="contain">包含</MenuItem>
+                      <MenuItem value="auto">自动</MenuItem>
+                      <MenuItem value="100% 100%">拉伸</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Box>
+              </>
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setIsBackgroundDialogOpen(false)}>
+              关闭
+            </Button>
+          </DialogActions>
+        </Dialog>
       </Box>
     </ThemeProvider>
   );
