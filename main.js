@@ -45,7 +45,7 @@ try {
 const dataFilePath = path.join(app.getPath("userData"), "hbnote-data.json");
 
 // 用于存储窗口初始大小和最大化状态
-let normalWindowBounds = { x: 100, y: 100, width: 400, height: 400 };
+let normalWindowBounds = { x: 100, y: 100, width: 470, height: 400 };
 let manualMaximizeState = false;
 let isFloatMode = false; // 是否处于悬浮窗模式
 

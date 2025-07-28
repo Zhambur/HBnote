@@ -11,17 +11,25 @@ import {
   DialogContent,
   DialogContentText,
   DialogTitle,
+  Grid,
+  FormControlLabel,
+  Switch,
 } from "@mui/material";
 import SaveIcon from "./mui_local_icons/SaveIcon";
 import CancelIcon from "./mui_local_icons/CancelIcon";
 import NoteItem from "./NoteItem";
+import FolderManager from "./FolderManager";
+import FolderSelector from "./FolderSelector";
+import FolderView from "./FolderView";
 import { v4 as uuidv4 } from "uuid";
 
 function Notes() {
   // 改为 useState 初始为空数组，然后在 useEffect 中异步加载数据
   const [notes, setNotes] = useState([]);
+  const [folders, setFolders] = useState([]);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [selectedFolderId, setSelectedFolderId] = useState("default");
   const [editingNoteId, setEditingNoteId] = useState(null);
   const titleInputRef = useRef(null);
   const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
@@ -32,29 +40,69 @@ function Notes() {
   const [isAnimating, setIsAnimating] = useState(false); // 跟踪是否正在播放放置动画
   const [dropTargetId, setDropTargetId] = useState(null); // 跟踪放置目标ID
   const [dragStartPosition, setDragStartPosition] = useState(null); // 记录拖拽开始位置
+  const [isFolderManagerOpen, setIsFolderManagerOpen] = useState(false);
+  const [useFolderView, setUseFolderView] = useState(false);
 
-  // 组件加载时异步获取笔记
+  // 组件加载时异步获取笔记和文件夹
   useEffect(() => {
-    const loadNotes = async () => {
+    const loadData = async () => {
       try {
-        console.log("[Notes] Loading notes...");
+        console.log("[Notes] Loading notes and folders...");
         setIsLoading(true);
+
+        // 加载笔记
         const storedNotes = await window.electronAPI.storeGet("notes");
         console.log(
           "[Notes] Notes loading complete:",
           storedNotes ? "Data exists" : "No data"
         );
-        // 确保 storedNotes 是数组
-        setNotes(Array.isArray(storedNotes) ? storedNotes : []);
+
+        // 加载文件夹
+        const storedFolders = await window.electronAPI.storeGet("noteFolders");
+        console.log(
+          "[Notes] Folders loading complete:",
+          storedFolders ? "Data exists" : "No data"
+        );
+
+        // 确保数据是数组
+        const notesData = Array.isArray(storedNotes) ? storedNotes : [];
+        const foldersData = Array.isArray(storedFolders) ? storedFolders : [];
+
+        // 如果没有文件夹数据，创建默认文件夹
+        if (foldersData.length === 0) {
+          const defaultFolders = [
+            {
+              id: "default",
+              name: "默认文件夹",
+              color: "#1976d2",
+              order: 0,
+              type: "notes",
+              createdAt: new Date().toISOString(),
+            },
+          ];
+          setFolders(defaultFolders);
+          await window.electronAPI.storeSet("noteFolders", defaultFolders);
+        } else {
+          setFolders(foldersData);
+        }
+
+        // 为没有文件夹ID的笔记设置默认文件夹
+        const processedNotes = notesData.map((note) => ({
+          ...note,
+          folderId: note.folderId || "default",
+        }));
+
+        setNotes(processedNotes);
       } catch (error) {
-        console.error("[Notes] Failed to load notes:", error);
+        console.error("[Notes] Failed to load data:", error);
         setNotes([]);
+        setFolders([]);
       } finally {
         setIsLoading(false);
       }
     };
 
-    loadNotes();
+    loadData();
   }, []);
 
   // 笔记变化时异步保存
@@ -75,6 +123,23 @@ function Notes() {
     }
   }, [notes, isLoading]);
 
+  // 文件夹变化时异步保存
+  useEffect(() => {
+    if (!isLoading && folders.length > 0) {
+      const saveFolders = async () => {
+        try {
+          console.log("[Notes] Saving folders...");
+          await window.electronAPI.storeSet("noteFolders", folders);
+          console.log("[Notes] Folders saved successfully!");
+        } catch (error) {
+          console.error("[Notes] Failed to save folders:", error);
+        }
+      };
+
+      saveFolders();
+    }
+  }, [folders, isLoading]);
+
   const focusTitleInput = () => {
     if (titleInputRef.current) {
       titleInputRef.current.focus();
@@ -84,6 +149,7 @@ function Notes() {
   const resetForm = () => {
     setTitle("");
     setContent("");
+    setSelectedFolderId("default");
     setEditingNoteId(null);
     setTimeout(focusTitleInput, 0);
   };
@@ -97,7 +163,13 @@ function Notes() {
       setNotes((prevNotes) =>
         prevNotes.map((note) =>
           note.id === editingNoteId
-            ? { ...note, title, content, date: new Date().toISOString() }
+            ? {
+                ...note,
+                title,
+                content,
+                folderId: selectedFolderId,
+                date: new Date().toISOString(),
+              }
             : note
         )
       );
@@ -106,6 +178,7 @@ function Notes() {
         id: uuidv4(),
         title,
         content,
+        folderId: selectedFolderId,
         date: new Date().toISOString(),
       };
       setNotes((prevNotes) => [newNote, ...prevNotes]);
@@ -116,6 +189,7 @@ function Notes() {
   const handleEdit = (noteToEdit) => {
     setTitle(noteToEdit.title);
     setContent(noteToEdit.content);
+    setSelectedFolderId(noteToEdit.folderId || "default");
     setEditingNoteId(noteToEdit.id);
     window.scrollTo({ top: 0, behavior: "smooth" });
     setTimeout(focusTitleInput, 50);
@@ -259,9 +333,27 @@ function Notes() {
   return (
     <Box>
       <Paper sx={{ p: 2, mb: 2 }}>
-        <Typography variant="h6" gutterBottom>
-          {editingNoteId ? "编辑笔记" : "创建新笔记"}
-        </Typography>
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            mb: 2,
+          }}
+        >
+          <Typography variant="h6">
+            {editingNoteId ? "编辑笔记" : "创建新笔记"}
+          </Typography>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={useFolderView}
+                onChange={(e) => setUseFolderView(e.target.checked)}
+              />
+            }
+            label="文件夹视图"
+          />
+        </Box>
         <TextField
           inputRef={titleInputRef}
           fullWidth
@@ -282,7 +374,13 @@ function Notes() {
           variant="outlined"
           sx={{ mb: 2 }}
         />
-        <Box sx={{ display: "flex", gap: 1 }}>
+        <FolderSelector
+          folders={folders}
+          selectedFolderId={selectedFolderId}
+          onFolderChange={setSelectedFolderId}
+          onManageFolders={() => setIsFolderManagerOpen(true)}
+        />
+        <Box sx={{ display: "flex", gap: 1, mt: 2 }}>
           <Button
             variant="contained"
             color="primary"
@@ -311,6 +409,33 @@ function Notes() {
         <Typography variant="body2" color="text.secondary" textAlign="center">
           暂无笔记，快来占坑！
         </Typography>
+      ) : useFolderView ? (
+        <FolderView
+          folders={folders}
+          items={notes}
+          renderItem={(note, index, folderId) => (
+            <NoteItem
+              key={note.id}
+              note={note}
+              index={index}
+              isDragOver={dragOverNoteId === note.id}
+              isDragging={draggedNoteId === note.id}
+              isAnimating={isAnimating}
+              isDropTarget={dropTargetId === note.id}
+              onEdit={handleEdit}
+              onDelete={handleDeleteInitiate}
+              onDragStart={(e) => handleDragStart(e, note.id)}
+              onDragOver={(e) => handleDragOver(e, note.id)}
+              onDragLeave={() => setDragOverNoteId(null)}
+              onDragEnd={() => {
+                setDragOverNoteId(null);
+                setDraggedNoteId(null);
+              }}
+              onDrop={(e) => handleDrop(e, note.id)}
+            />
+          )}
+          type="notes"
+        />
       ) : (
         <List
           sx={{ pt: 0 }}
@@ -361,6 +486,14 @@ function Notes() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <FolderManager
+        open={isFolderManagerOpen}
+        onClose={() => setIsFolderManagerOpen(false)}
+        folders={folders}
+        onFoldersChange={setFolders}
+        type="notes"
+      />
     </Box>
   );
 }

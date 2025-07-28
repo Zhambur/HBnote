@@ -18,6 +18,7 @@ import {
   MenuItem,
   FormControl,
   Grid,
+  Switch,
 } from "@mui/material";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
@@ -25,12 +26,17 @@ import zhCN from "date-fns/locale/zh-CN";
 import SaveIcon from "./mui_local_icons/SaveIcon";
 import CancelIcon from "./mui_local_icons/CancelIcon";
 import DDLItem from "./DDLItem";
+import FolderManager from "./FolderManager";
+import FolderSelector from "./FolderSelector";
+import FolderView from "./FolderView";
 import { v4 as uuidv4 } from "uuid";
 
 function DDL() {
   const [ddls, setDdls] = useState([]);
+  const [folders, setFolders] = useState([]);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [selectedFolderId, setSelectedFolderId] = useState("default");
 
   // 日期时间输入替代DateTimePicker
   const [deadlineDate, setDeadlineDate] = useState("");
@@ -43,30 +49,70 @@ function DDL() {
   const [ddlIdToDeleteInConfirm, setDdlIdToDeleteInConfirm] = useState(null);
   const [isDateErrorDialogOpen, setIsDateErrorDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isFolderManagerOpen, setIsFolderManagerOpen] = useState(false);
+  const [useFolderView, setUseFolderView] = useState(false);
   const titleInputRef = useRef(null);
 
-  // 组件加载时异步获取DDL项目
+  // 组件加载时异步获取DDL项目和文件夹
   useEffect(() => {
-    const loadDdls = async () => {
+    const loadData = async () => {
       try {
-        console.log("[DDL] Loading ddls...");
+        console.log("[DDL] Loading ddls and folders...");
         setIsLoading(true);
+
+        // 加载DDL项目
         const storedDdls = await window.electronAPI.storeGet("ddls");
         console.log(
           "[DDL] DDLs loading complete:",
           storedDdls ? "Data exists" : "No data"
         );
-        // 确保 storedDdls 是数组
-        setDdls(Array.isArray(storedDdls) ? storedDdls : []);
+
+        // 加载文件夹
+        const storedFolders = await window.electronAPI.storeGet("ddlFolders");
+        console.log(
+          "[DDL] Folders loading complete:",
+          storedFolders ? "Data exists" : "No data"
+        );
+
+        // 确保数据是数组
+        const ddlsData = Array.isArray(storedDdls) ? storedDdls : [];
+        const foldersData = Array.isArray(storedFolders) ? storedFolders : [];
+
+        // 如果没有文件夹数据，创建默认文件夹
+        if (foldersData.length === 0) {
+          const defaultFolders = [
+            {
+              id: "default",
+              name: "默认文件夹",
+              color: "#1976d2",
+              order: 0,
+              type: "ddls",
+              createdAt: new Date().toISOString(),
+            },
+          ];
+          setFolders(defaultFolders);
+          await window.electronAPI.storeSet("ddlFolders", defaultFolders);
+        } else {
+          setFolders(foldersData);
+        }
+
+        // 为没有文件夹ID的DDL项目设置默认文件夹
+        const processedDdls = ddlsData.map((ddl) => ({
+          ...ddl,
+          folderId: ddl.folderId || "default",
+        }));
+
+        setDdls(processedDdls);
       } catch (error) {
-        console.error("[DDL] Failed to load ddls:", error);
+        console.error("[DDL] Failed to load data:", error);
         setDdls([]);
+        setFolders([]);
       } finally {
         setIsLoading(false);
       }
     };
 
-    loadDdls();
+    loadData();
   }, []);
 
   // DDL变化时异步保存
@@ -85,6 +131,23 @@ function DDL() {
       saveDdls();
     }
   }, [ddls, isLoading]);
+
+  // 文件夹变化时异步保存
+  useEffect(() => {
+    if (!isLoading && folders.length > 0) {
+      const saveFolders = async () => {
+        try {
+          console.log("[DDL] Saving folders...");
+          await window.electronAPI.storeSet("ddlFolders", folders);
+          console.log("[DDL] Folders saved successfully!");
+        } catch (error) {
+          console.error("[DDL] Failed to save folders:", error);
+        }
+      };
+
+      saveFolders();
+    }
+  }, [folders, isLoading]);
 
   // 初始化日期时间输入框
   useEffect(() => {
@@ -261,6 +324,7 @@ function DDL() {
   const resetForm = () => {
     setTitle("");
     setContent("");
+    setSelectedFolderId("default");
 
     // 重置日期和时间
     const tomorrow = new Date();
@@ -329,6 +393,7 @@ function DDL() {
                 ...ddl,
                 title,
                 content,
+                folderId: selectedFolderId,
                 deadline: deadlineObj.toISOString(),
                 reminder,
                 reminderTime,
@@ -343,6 +408,7 @@ function DDL() {
         id: uuidv4(),
         title,
         content,
+        folderId: selectedFolderId,
         deadline: deadlineObj.toISOString(),
         reminder,
         reminderTime,
@@ -357,6 +423,7 @@ function DDL() {
   const handleEdit = (ddlToEdit) => {
     setTitle(ddlToEdit.title);
     setContent(ddlToEdit.content);
+    setSelectedFolderId(ddlToEdit.folderId || "default");
     setReminder(ddlToEdit.reminder);
     setReminderTime(ddlToEdit.reminderTime);
     setEditingDdlId(ddlToEdit.id);
@@ -412,9 +479,27 @@ function DDL() {
     <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={zhCN}>
       <Box>
         <Paper sx={{ p: 2, mb: 2 }}>
-          <Typography variant="h6" gutterBottom>
-            {editingDdlId ? "编辑DDL" : "创建新DDL"}
-          </Typography>
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              mb: 2,
+            }}
+          >
+            <Typography variant="h6">
+              {editingDdlId ? "编辑DDL" : "创建新DDL"}
+            </Typography>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={useFolderView}
+                  onChange={(e) => setUseFolderView(e.target.checked)}
+                />
+              }
+              label="文件夹视图"
+            />
+          </Box>
           <TextField
             inputRef={titleInputRef}
             fullWidth
@@ -498,6 +583,12 @@ function DDL() {
               </FormControl>
             )}
           </Box>
+          <FolderSelector
+            folders={folders}
+            selectedFolderId={selectedFolderId}
+            onFolderChange={setSelectedFolderId}
+            onManageFolders={() => setIsFolderManagerOpen(true)}
+          />
           <Box sx={{ display: "flex", gap: 1 }}>
             <Button
               variant="contained"
@@ -527,6 +618,20 @@ function DDL() {
           <Typography variant="body2" color="text.secondary" textAlign="center">
             暂无DDL，请尽情享受无DDL的美好时光~
           </Typography>
+        ) : useFolderView ? (
+          <FolderView
+            folders={folders}
+            items={sortedDdls}
+            renderItem={(ddl, index, folderId) => (
+              <DDLItem
+                key={ddl.id}
+                ddl={ddl}
+                onEdit={handleEdit}
+                onDelete={handleDeleteInitiate}
+              />
+            )}
+            type="ddls"
+          />
         ) : (
           <List sx={{ pt: 0 }}>
             {sortedDdls.map((ddl) => (
@@ -583,6 +688,14 @@ function DDL() {
             </Button>
           </DialogActions>
         </Dialog>
+
+        <FolderManager
+          open={isFolderManagerOpen}
+          onClose={() => setIsFolderManagerOpen(false)}
+          folders={folders}
+          onFoldersChange={setFolders}
+          type="ddls"
+        />
       </Box>
     </LocalizationProvider>
   );

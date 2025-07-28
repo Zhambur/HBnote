@@ -17,15 +17,22 @@ import {
   Select,
   MenuItem,
   Grid,
+  FormControlLabel,
+  Switch,
 } from "@mui/material";
 import AddIcon from "./mui_local_icons/AddIcon";
 import TodoItem from "./TodoItem";
+import FolderManager from "./FolderManager";
+import FolderSelector from "./FolderSelector";
+import FolderView from "./FolderView";
 import { v4 as uuidv4 } from "uuid";
 
 function TodoList() {
   const [todos, setTodos] = useState([]);
+  const [folders, setFolders] = useState([]);
   const [newTodo, setNewTodo] = useState("");
   const [newTodoPriority, setNewTodoPriority] = useState("medium"); // 默认优先级为中
+  const [selectedFolderId, setSelectedFolderId] = useState("default");
   const [sortBy, setSortBy] = useState("priority"); // 默认按优先级排序
   const [isLoading, setIsLoading] = useState(true);
   const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
@@ -39,6 +46,9 @@ function TodoList() {
   const [draggedTodoId, setDraggedTodoId] = useState(null); // 跟踪正在拖拽的待办事项ID
   const [isAnimating, setIsAnimating] = useState(false); // 跟踪是否正在播放放置动画
   const [dropTargetId, setDropTargetId] = useState(null); // 跟踪放置目标ID
+  const [isFolderManagerOpen, setIsFolderManagerOpen] = useState(false);
+  const [useFolderView, setUseFolderView] = useState(false);
+  const [showCompleted, setShowCompleted] = useState(true);
 
   // 优先级选项
   const priorityOptions = [
@@ -48,25 +58,72 @@ function TodoList() {
   ];
 
   useEffect(() => {
-    const loadTodos = async () => {
+    const loadData = async () => {
       try {
-        console.log("[TodoList] Loading todo items...");
+        console.log("[TodoList] Loading todo items and folders...");
         setIsLoading(true);
+
+        // 加载待办事项
         const storedTodos = await window.electronAPI.storeGet("todos");
         console.log(
           "[TodoList] Todo items loading complete:",
           storedTodos ? "Data exists" : "No data"
         );
-        setTodos(Array.isArray(storedTodos) ? storedTodos : []);
+
+        // 加载文件夹
+        const storedFolders = await window.electronAPI.storeGet("todoFolders");
+        console.log(
+          "[TodoList] Folders loading complete:",
+          storedFolders ? "Data exists" : "No data"
+        );
+
+        // 确保数据是数组
+        const todosData = Array.isArray(storedTodos) ? storedTodos : [];
+        const foldersData = Array.isArray(storedFolders) ? storedFolders : [];
+
+        // 如果没有文件夹数据，创建默认文件夹
+        if (foldersData.length === 0) {
+          const defaultFolders = [
+            {
+              id: "default",
+              name: "默认文件夹",
+              color: "#1976d2",
+              order: 0,
+              type: "todos",
+              createdAt: new Date().toISOString(),
+            },
+            {
+              id: "completed",
+              name: "已完成事项",
+              color: "#388e3c",
+              order: 1,
+              type: "todos",
+              createdAt: new Date().toISOString(),
+            },
+          ];
+          setFolders(defaultFolders);
+          await window.electronAPI.storeSet("todoFolders", defaultFolders);
+        } else {
+          setFolders(foldersData);
+        }
+
+        // 为没有文件夹ID的待办事项设置默认文件夹
+        const processedTodos = todosData.map((todo) => ({
+          ...todo,
+          folderId: todo.folderId || "default",
+        }));
+
+        setTodos(processedTodos);
       } catch (error) {
-        console.error("[TodoList] Failed to load todo items:", error);
+        console.error("[TodoList] Failed to load data:", error);
         setTodos([]);
+        setFolders([]);
       } finally {
         setIsLoading(false);
       }
     };
 
-    loadTodos();
+    loadData();
   }, []);
 
   useEffect(() => {
@@ -85,6 +142,23 @@ function TodoList() {
     }
   }, [todos, isLoading]);
 
+  // 文件夹变化时异步保存
+  useEffect(() => {
+    if (!isLoading && folders.length > 0) {
+      const saveFolders = async () => {
+        try {
+          console.log("[TodoList] Saving folders...");
+          await window.electronAPI.storeSet("todoFolders", folders);
+          console.log("[TodoList] Folders saved successfully!");
+        } catch (error) {
+          console.error("[TodoList] Failed to save folders:", error);
+        }
+      };
+
+      saveFolders();
+    }
+  }, [folders, isLoading]);
+
   const handleAddTodo = () => {
     if (newTodo.trim()) {
       const newTodoItem = {
@@ -92,19 +166,33 @@ function TodoList() {
         text: newTodo,
         priority: newTodoPriority,
         completed: false,
+        folderId: selectedFolderId,
         date: new Date().toISOString(),
       };
       setTodos((prevTodos) => [...prevTodos, newTodoItem]);
       setNewTodo("");
       setNewTodoPriority("medium"); // 重置为默认优先级
+      setSelectedFolderId("default"); // 重置为默认文件夹
     }
   };
 
   const handleToggleTodo = (todoId) => {
     setTodos((prevTodos) =>
-      prevTodos.map((todo) =>
-        todo.id === todoId ? { ...todo, completed: !todo.completed } : todo
-      )
+      prevTodos.map((todo) => {
+        if (todo.id === todoId) {
+          const newCompleted = !todo.completed;
+          // 如果标记为完成，自动移动到已完成文件夹
+          const newFolderId = newCompleted ? "completed" : todo.folderId;
+          const completedAt = newCompleted ? new Date().toISOString() : null;
+          return {
+            ...todo,
+            completed: newCompleted,
+            folderId: newFolderId,
+            completedAt: completedAt,
+          };
+        }
+        return todo;
+      })
     );
   };
 
@@ -144,6 +232,7 @@ function TodoList() {
                 ...todo,
                 text: editText.trim(),
                 priority: editPriority,
+                folderId: selectedFolderId,
               }
             : todo
         )
@@ -152,6 +241,7 @@ function TodoList() {
       setEditingTodo(null);
       setEditText("");
       setEditPriority("medium");
+      setSelectedFolderId("default");
     }
   };
 
@@ -280,8 +370,40 @@ function TodoList() {
   return (
     <Box>
       <Paper sx={{ p: 2, mb: 2 }}>
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            mb: 2,
+          }}
+        >
+          <Typography variant="h6">待办事项</Typography>
+          <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={useFolderView}
+                  onChange={(e) => setUseFolderView(e.target.checked)}
+                />
+              }
+              label="文件夹视图"
+            />
+            {useFolderView && (
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={showCompleted}
+                    onChange={(e) => setShowCompleted(e.target.checked)}
+                  />
+                }
+                label="显示已完成"
+              />
+            )}
+          </Box>
+        </Box>
         <Grid container spacing={2} sx={{ mb: 2 }}>
-          <Grid item xs={12} sm={6}>
+          <Grid item xs={12} sm={5}>
             <TextField
               fullWidth
               label="NewTodo"
@@ -292,7 +414,7 @@ function TodoList() {
               size="small"
             />
           </Grid>
-          <Grid item xs={12} sm={3}>
+          <Grid item xs={12} sm={2}>
             <FormControl fullWidth size="small">
               <InputLabel>优先级</InputLabel>
               <Select
@@ -308,19 +430,27 @@ function TodoList() {
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} sm={2}>
+          <Grid item xs={12} sm={3}>
+            <FolderSelector
+              folders={folders}
+              selectedFolderId={selectedFolderId}
+              onFolderChange={setSelectedFolderId}
+              onManageFolders={() => setIsFolderManagerOpen(true)}
+            />
+          </Grid>
+          <Grid item xs={12} sm={1}>
             <FormControl fullWidth size="small">
-              <InputLabel>排序方式</InputLabel>
+              <InputLabel>排序</InputLabel>
               <Select
                 value={sortBy}
-                label="排序方式"
+                label="排序"
                 onChange={(e) => {
                   setSortBy(e.target.value);
                   setUserOrder(null); // 切换排序方式时重置用户自定义顺序
                 }}
               >
                 <MenuItem value="priority">按优先级</MenuItem>
-                <MenuItem value="time">按创建时间</MenuItem>
+                <MenuItem value="time">按时间</MenuItem>
               </Select>
             </FormControl>
           </Grid>
@@ -355,6 +485,35 @@ function TodoList() {
         >
           你很勤快，没有需要做的。
         </Typography>
+      ) : useFolderView ? (
+        <FolderView
+          folders={folders}
+          items={todos}
+          renderItem={(todo, index, folderId) => (
+            <TodoItem
+              key={todo.id}
+              todo={todo}
+              index={index}
+              isDragOver={dragOverTodoId === todo.id}
+              isDragging={draggedTodoId === todo.id}
+              isAnimating={isAnimating}
+              isDropTarget={dropTargetId === todo.id}
+              onToggle={handleToggleTodo}
+              onDelete={handleDeleteTodo}
+              onEdit={handleEditTodo}
+              onDragStart={(e) => handleDragStart(e, todo.id)}
+              onDragOver={(e) => handleDragOver(e, todo.id)}
+              onDragLeave={() => setDragOverTodoId(null)}
+              onDragEnd={() => {
+                setDragOverTodoId(null);
+                setDraggedTodoId(null);
+              }}
+              onDrop={(e) => handleDrop(e, todo.id)}
+            />
+          )}
+          showCompleted={showCompleted}
+          type="todos"
+        />
       ) : (
         <List
           sx={{ pt: 0 }}
@@ -456,6 +615,14 @@ function TodoList() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <FolderManager
+        open={isFolderManagerOpen}
+        onClose={() => setIsFolderManagerOpen(false)}
+        folders={folders}
+        onFoldersChange={setFolders}
+        type="todos"
+      />
     </Box>
   );
 }
