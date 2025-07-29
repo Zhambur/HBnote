@@ -1,21 +1,29 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { Box, Typography, IconButton, Slider, Tooltip } from "@mui/material";
+import {
+  Box,
+  Typography,
+  IconButton,
+  Slider,
+  Tooltip,
+  Chip,
+} from "@mui/material";
 import RestoreIcon from "./mui_local_icons/RestoreIcon";
 import EditIcon from "./mui_local_icons/EditIcon";
 
 // 使用React.memo优化组件
 const FloatWindow = React.memo(({ onRestore, mode = "dark" }) => {
   const [ddls, setDdls] = useState([]);
+  const [schedules, setSchedules] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // 悬浮窗设置状态
   const [opacity, setOpacity] = useState(0.9);
   const [showOpacitySlider, setShowOpacitySlider] = useState(false);
+  const [viewMode, setViewMode] = useState("ddl"); // "ddl" 或 "schedule"
 
   // 使用useCallback优化函数引用
   const loadDdls = useCallback(async () => {
     try {
-      setLoading(true);
       const storedDdls = await window.electronAPI.storeGet("ddls");
       if (Array.isArray(storedDdls)) {
         // 按截止时间排序
@@ -29,8 +37,25 @@ const FloatWindow = React.memo(({ onRestore, mode = "dark" }) => {
     } catch (error) {
       console.error("[FloatWindow] Failed to load ddls:", error);
       setDdls([]);
-    } finally {
-      setLoading(false);
+    }
+  }, []);
+
+  const loadSchedules = useCallback(async () => {
+    try {
+      const storedSchedules = await window.electronAPI.storeGet("schedules");
+      if (Array.isArray(storedSchedules)) {
+        // 获取今日的日程安排
+        const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+        const todaySchedules = storedSchedules
+          .filter((schedule) => schedule.date === today)
+          .sort((a, b) => new Date(a.startTime) - new Date(b.startTime)); // 按开始时间排序
+        setSchedules(todaySchedules);
+      } else {
+        setSchedules([]);
+      }
+    } catch (error) {
+      console.error("[FloatWindow] Failed to load schedules:", error);
+      setSchedules([]);
     }
   }, []);
 
@@ -42,6 +67,11 @@ const FloatWindow = React.memo(({ onRestore, mode = "dark" }) => {
           "floatOpacity"
         );
         if (savedOpacity !== undefined) setOpacity(savedOpacity);
+
+        const savedViewMode = await window.electronAPI?.storeGet?.(
+          "floatViewMode"
+        );
+        if (savedViewMode) setViewMode(savedViewMode);
       } catch (error) {
         console.error("Failed to load float settings:", error);
       }
@@ -61,15 +91,47 @@ const FloatWindow = React.memo(({ onRestore, mode = "dark" }) => {
     saveFloatSettings();
   }, [opacity]);
 
+  // 保存视图模式设置
   useEffect(() => {
-    loadDdls();
+    const saveViewMode = async () => {
+      try {
+        await window.electronAPI?.storeSet?.("floatViewMode", viewMode);
+      } catch (error) {
+        console.error("Failed to save view mode:", error);
+      }
+    };
+    saveViewMode();
+  }, [viewMode]);
+
+  // 加载所有数据
+  const loadAllData = useCallback(async () => {
+    setLoading(true);
+    try {
+      await Promise.all([loadDdls(), loadSchedules()]);
+    } finally {
+      setLoading(false);
+    }
+  }, [loadDdls, loadSchedules]);
+
+  useEffect(() => {
+    loadAllData();
     // 每分钟刷新一次数据
-    const interval = setInterval(loadDdls, 60000);
+    const interval = setInterval(loadAllData, 60000);
     return () => clearInterval(interval);
-  }, [loadDdls]);
+  }, [loadAllData]);
 
   // 使用useMemo缓存计算结果
   const nextDdl = useMemo(() => (ddls.length > 0 ? ddls[0] : null), [ddls]);
+  const todaySchedules = useMemo(() => schedules.slice(0, 3), [schedules]); // 只显示前3个日程
+
+  // 计算今日统计
+  const todayStats = useMemo(() => {
+    const highPriority = schedules.filter(
+      (schedule) => schedule.priority === "high"
+    ).length;
+    const total = schedules.length;
+    return { highPriority, total };
+  }, [schedules]);
 
   // 使用useMemo缓存格式化函数，避免重复创建
   const formatTimeRemaining = useCallback((deadline) => {
@@ -125,7 +187,7 @@ const FloatWindow = React.memo(({ onRestore, mode = "dark" }) => {
       overflow: "hidden",
       padding: "8px",
       color: mode === "dark" ? "white" : "black",
-      WebkitAppRegion: "drag", // 整个窗口可拖动
+      WebkitAppRegion: "no-drag", // 默认不可拖动
       // 移除所有边框和分割线
       border: "none",
       outline: "none",
@@ -137,6 +199,20 @@ const FloatWindow = React.memo(({ onRestore, mode = "dark" }) => {
             : "0 1px 2px rgba(255, 255, 255, 0.8)",
       }),
     },
+    modeToggle: {
+      display: "flex",
+      gap: "4px",
+      mb: 1,
+      WebkitAppRegion: "no-drag",
+    },
+    modeChip: {
+      cursor: "pointer",
+      fontSize: "0.7rem",
+      height: "20px",
+      "&:hover": {
+        opacity: 0.8,
+      },
+    },
     header: {
       display: "flex",
       justifyContent: "space-between",
@@ -144,6 +220,8 @@ const FloatWindow = React.memo(({ onRestore, mode = "dark" }) => {
       mb: 1,
       border: "none",
       borderBottom: "none",
+      WebkitAppRegion: "drag", // 顶部区域可拖动
+      cursor: "move", // 显示移动光标
     },
     headerText: {
       fontWeight: "bold",
@@ -179,8 +257,25 @@ const FloatWindow = React.memo(({ onRestore, mode = "dark" }) => {
     },
     contentArea: {
       flexGrow: 1,
-      overflow: "hidden",
+      overflow: "auto",
       border: "none",
+      WebkitAppRegion: "no-drag", // 内容区域不可拖动，允许滚动
+      // 自定义滚动条样式
+      "&::-webkit-scrollbar": {
+        width: "6px",
+      },
+      "&::-webkit-scrollbar-track": {
+        backgroundColor: "transparent",
+      },
+      "&::-webkit-scrollbar-thumb": {
+        backgroundColor:
+          mode === "dark" ? "rgba(255, 255, 255, 0.3)" : "rgba(0, 0, 0, 0.3)",
+        borderRadius: "3px",
+        "&:hover": {
+          backgroundColor:
+            mode === "dark" ? "rgba(255, 255, 255, 0.5)" : "rgba(0, 0, 0, 0.5)",
+        },
+      },
     },
     title: {
       fontWeight: "bold",
@@ -203,14 +298,64 @@ const FloatWindow = React.memo(({ onRestore, mode = "dark" }) => {
       WebkitLineClamp: 2,
       WebkitBoxOrient: "vertical",
     },
+    scheduleItem: {
+      display: "flex",
+      alignItems: "center",
+      gap: "4px",
+      mb: 0.5,
+      fontSize: "0.8rem",
+    },
+    priorityChip: {
+      fontSize: "0.6rem",
+      height: "16px",
+      minWidth: "24px",
+    },
+    scheduleText: {
+      flex: 1,
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap",
+    },
+    timeText: {
+      fontSize: "0.7rem",
+      opacity: 0.8,
+      minWidth: "60px",
+    },
   };
 
   return (
     <Box sx={styles.container}>
+      {/* 模式切换 */}
+      <Box sx={styles.modeToggle}>
+        <Chip
+          label="DDL"
+          size="small"
+          variant={viewMode === "ddl" ? "filled" : "outlined"}
+          onClick={() => setViewMode("ddl")}
+          sx={{
+            ...styles.modeChip,
+            backgroundColor: viewMode === "ddl" ? "#1976d2" : "transparent",
+            color: viewMode === "ddl" ? "white" : "inherit",
+          }}
+        />
+        <Chip
+          label="日程"
+          size="small"
+          variant={viewMode === "schedule" ? "filled" : "outlined"}
+          onClick={() => setViewMode("schedule")}
+          sx={{
+            ...styles.modeChip,
+            backgroundColor:
+              viewMode === "schedule" ? "#388e3c" : "transparent",
+            color: viewMode === "schedule" ? "white" : "inherit",
+          }}
+        />
+      </Box>
+
       {/* 顶部栏 */}
       <Box sx={styles.header}>
         <Typography variant="subtitle2" sx={styles.headerText}>
-          最近DDL
+          {viewMode === "ddl" ? "最近DDL" : "今日日程"}
         </Typography>
         <Box sx={styles.buttonGroup}>
           {/* 透明度调节按钮 */}
@@ -267,25 +412,95 @@ const FloatWindow = React.memo(({ onRestore, mode = "dark" }) => {
       <Box sx={styles.contentArea}>
         {loading ? (
           <Typography variant="body2">加载中...</Typography>
-        ) : !nextDdl ? (
-          <Typography variant="body2">暂无待办事项</Typography>
+        ) : viewMode === "ddl" ? (
+          // DDL模式
+          !nextDdl ? (
+            <Typography variant="body2">暂无DDL</Typography>
+          ) : (
+            <Box>
+              <Typography variant="body1" sx={styles.title}>
+                {nextDdl.title}
+              </Typography>
+
+              <Typography variant="body2" sx={styles.deadline}>
+                截止: {formattedDeadline}
+              </Typography>
+
+              <Typography variant="body2" sx={styles.timeRemaining}>
+                剩余: {timeRemaining}
+              </Typography>
+
+              {nextDdl.content && (
+                <Typography variant="body2" sx={styles.content}>
+                  {nextDdl.content}
+                </Typography>
+              )}
+            </Box>
+          )
+        ) : // 日程模式
+        todaySchedules.length === 0 ? (
+          <Typography variant="body2">今日无日程安排</Typography>
         ) : (
           <Box>
-            <Typography variant="body1" sx={styles.title}>
-              {nextDdl.title}
-            </Typography>
+            {/* 统计信息 */}
+            <Box sx={{ mb: 1, display: "flex", gap: 1 }}>
+              <Chip
+                label={`${todayStats.total}项`}
+                size="small"
+                variant="outlined"
+                sx={{ fontSize: "0.6rem", height: "16px" }}
+              />
+              {todayStats.highPriority > 0 && (
+                <Chip
+                  label={`${todayStats.highPriority}个高优先级`}
+                  size="small"
+                  sx={{
+                    fontSize: "0.6rem",
+                    height: "16px",
+                    backgroundColor: "#d32f2f",
+                    color: "white",
+                  }}
+                />
+              )}
+            </Box>
 
-            <Typography variant="body2" sx={styles.deadline}>
-              截止: {formattedDeadline}
-            </Typography>
-
-            <Typography variant="body2" sx={styles.timeRemaining}>
-              剩余: {timeRemaining}
-            </Typography>
-
-            {nextDdl.content && (
-              <Typography variant="body2" sx={styles.content}>
-                {nextDdl.content}
+            {/* 日程列表 */}
+            {todaySchedules.map((schedule, index) => (
+              <Box key={schedule.id} sx={styles.scheduleItem}>
+                <Chip
+                  label={
+                    schedule.priority === "high"
+                      ? "高"
+                      : schedule.priority === "low"
+                      ? "低"
+                      : "中"
+                  }
+                  size="small"
+                  sx={{
+                    ...styles.priorityChip,
+                    backgroundColor:
+                      schedule.priority === "high"
+                        ? "#d32f2f"
+                        : schedule.priority === "low"
+                        ? "#388e3c"
+                        : "#f57c00",
+                    color: "white",
+                  }}
+                />
+                <Typography variant="body2" sx={styles.timeText}>
+                  {new Date(schedule.startTime).toLocaleTimeString("zh-CN", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </Typography>
+                <Typography variant="body2" sx={styles.scheduleText}>
+                  {schedule.title}
+                </Typography>
+              </Box>
+            ))}
+            {schedules.length > 3 && (
+              <Typography variant="caption" sx={{ mt: 1, opacity: 0.7 }}>
+                还有 {schedules.length - 3} 个日程...
               </Typography>
             )}
           </Box>
